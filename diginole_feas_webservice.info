@@ -1,0 +1,7 @@
+name = DigiNole FEAS Webservice
+description = Creates DigiNole webservice for FSU FEAS system consumption
+dependencies[] = islandora
+dependencies[] = islandora_solr
+package = Islandora Tools
+core = 7.x
+version = 7.x-dev
