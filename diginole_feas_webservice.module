@@ -19,66 +19,9 @@ function diginole_feas_webservice_menu() {
  * Callback functions
  */
 function diginole_feas_webservice_query_responder() {
+  module_load_include('inc', 'diginole_feas_webservice', 'includes/responders');
   $response = diginole_feas_webservice_query_processor($_GET);
   Header('Content-type: text/xml');
   echo $response;
   drupal_exit();
-}
-
-function diginole_feas_webservice_query_processor($args) {
-
-  // Request is invalid if no type specified
-  if (!$args['type']) {
-    return diginole_feas_webservice_xml_builder('error', 'type');
-  }
- 
-  // Respond to valid request
-  else {
-
-    // Search and return array of PID results
-
-    return diginole_feas_webservice_xml_builder('success', array('islandora:1', 'islandora:root'));
-
-  }
-
-}
-
-function diginole_feas_webservice_xml_builder($type, $args) {
-  $response = new SimpleXMLElement("<response></response>");
-
-  switch ($type) {
-
-    case 'error':
-      $response->addAttribute('type', 'error');
-        switch ($args) {
-
-          case 'type':
-            $response->addChild('error', 'Missing "type" parameter (required)');
-            break;
-
-        }
-      break;
-
-    case 'success':
-      $response->addAttribute('type', 'success');
-      $response->addAttribute('count', count($args));
-  
-      foreach ($args as $result) {    
-        diginole_feas_webservice_mods_transformer($result, $response);
-      }
-      break;
-
-  }
-
-  return $response->asXML();
-}
-
-function diginole_feas_webservice_mods_transformer($pid, &$response) {
-
-  // Load object
-  $object = islandora_object_load($pid);
-  $mods = simplexml_load_string($object['MODS']->content);
-  
-  
-  $response->addChild('result', $object->label);
 }
