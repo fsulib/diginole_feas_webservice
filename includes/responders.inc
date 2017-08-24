@@ -86,7 +86,13 @@ function diginole_feas_webservice_xml_builder($type, $args) {
       foreach ($args as $result) {    
         $object = islandora_object_load($result);
         $mods = simplexml_load_string($object['MODS']->content);
-        $purl = $mods->location->url;
+
+        foreach ($mods->location as $location) {
+          if ($location['displayLabel'] == 'purl') {
+            $purl = $location->url;
+          }
+        }
+
         $response->addChild('result', $purl)->addAttribute('pid', $result);
       }
       break;
