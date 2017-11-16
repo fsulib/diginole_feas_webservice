@@ -2,57 +2,74 @@
 
 function diginole_feas_webservice_query_processor($args) {
 
+  // Not enough queryable info provided
+  if (!array_key_exists('doi', $args) && !array_key_exists('title', $args) && !array_key_exists('authors', $args)) {
+    return diginole_feas_webservice_xml_builder('error', 'vague');
+  }
+
   // Request is invalid if no type specified
-  if (array_key_exists('type', $args) && $args['type'] != 'article' && $args['type'] != 'thesis') {
+  else if (array_key_exists('type', $args) && $args['type'] != 'article' && $args['type'] != 'thesis') {
     return diginole_feas_webservice_xml_builder('error', 'type');
   }
- 
+
   // Respond to valid request
   else {
     $qp = new IslandoraSolrQueryProcessor();
-    
+
+    // Build base queries
+    $base_queries = array();
     if (array_key_exists('doi', $args)) {
-      $query = "mods_identifier_mt:\"{$args['doi']}\"";
-      $qp->buildQuery($query);
-      if (array_key_exists('authors', $args)) {
-        $qp->solrParams['fq'] = "catch_all_names_mt:\"{$args['authors']}\"";
+      $base_queries['mods_identifier_mt'] = $args['doi']; 
+    }
+    if (array_key_exists('authors', $args)) {
+      $base_queries['catch_all_names_mt'] = $args['authors']; 
+    }
+    if (array_key_exists('title', $args)) {
+      $base_queries['catch_all_titles_mt'] = $args['title']; 
+    }
+    $base_query = "";
+    $i = 0;
+    foreach ($base_queries as $key => $value) {
+      if ($key == 'catch_all_names_mt') {
+        $authors = explode('+', str_replace(' ', '+', $value));
+        foreach ($authors as $author) {
+          $prefix = ($i == 0 ? '' : '+');
+          $base_query .= "{$prefix}{$key}:\"{$author}\"";
+          $i++;
+        }
       }
-      if (array_key_exists('title', $args)) {
-        $qp->solrParams['fq'] = "catch_all_titles_mt:\"{$args['title']}\"";
+      else {
+        $prefix = ($i == 0 ? "" : "+");
+        $base_query .= "{$prefix}{$key}:\"{$value}\"";
+        $i++;
       }
-    }
-    else if (array_key_exists('authors', $args)) {
-      watchdog("dn", $args['authors']);
-      $query = "catch_all_names_mt:\"{$args['authors']}\"";
-      $qp->buildQuery($query);
-      if (array_key_exists('title', $args)) {
-        $qp->solrParams['fq'] = "catch_all_titles_mt:\"{$args['title']}\"";
-      }
-    }
-    else if (array_key_exists('title', $args)) {
-      watchdog("dn", $args['title']);
-      $query = "catch_all_titles_mt:\"{$args['title']}\"";
-      $qp->buildQuery($query);
-    }
-    else {
-      return diginole_feas_webservice_xml_builder('error', 'vague');
-    }
-    
-    $qp->solrParams['fl'] = "PID";
+    } 
+    $qp->buildQuery($base_query);
 
+    // Build filter queries
+    $filter_queries = array();
     if (array_key_exists('date', $args)) {
-      $qp->solrParams['fq'] = "mods_originInfo_dateIssued_mt:\"{$args['date']}\"";
+      $filter_queries['mods_originInfo_dateIssued_mt'] = $args['date']; 
     }
-
     if (array_key_exists('type', $args)) {
       if ($args['type'] == 'article') {
-        $qp->solrParams['fq'] = "RELS_EXT_hasModel_uri_mt:\"info:fedora/ir:citationCModel\"";
+        $filter_queries['RELS_EXT_hasModel_uri_mt'] = "info:fedora/ir:citationCModel";
       }
       if ($args['type'] == 'thesis') {
-        $qp->solrParams['fq'] = "RELS_EXT_hasModel_uri_mt:\"info:fedora/ir:thesisCModel\"";
+        $filter_queries['RELS_EXT_hasModel_uri_mt'] = "info:fedora/ir:thesisCModel";
       }
     }
-
+    $filter_query = "";
+    $i = 0;
+    foreach ($filter_queries as $key => $value) {
+      $prefix = ($i = 0 ? "+" : "");
+      $filter_query .= "{$prefix}{$key}:\"{$value}\"";
+      $i++;
+    } 
+    $qp->solrParams['fq'] = $filter_query;
+    
+    $qp->solrLimit = 1000000;
+    $qp->solrParams['fl'] = "PID";
     $qp->executeQuery(FALSE);
     $results = $qp->islandoraSolrResult['response'];
     $pids = array();
@@ -81,20 +98,21 @@ function diginole_feas_webservice_xml_builder($type, $args) {
         }
       break;
     case 'success':
-      $response->addAttribute('type', 'success');
-      $response->addAttribute('count', count($args));
+      $i = 0;
       foreach ($args as $result) {    
         $object = islandora_object_load($result);
         $mods = simplexml_load_string($object['MODS']->content);
 
-        foreach ($mods->location as $location) {
-          if ($location['displayLabel'] == 'purl') {
-            $purl = $location->url;
+        foreach ($mods->identifier as $id) {
+          if (strtolower($id['type']) == 'iid') {
+            $purl = "http://purl.flvc.org/fsu/fd/{$id}";
+            $response->addChild('result', $purl)->addAttribute('pid', $result);
+            $i++;
           }
         }
-
-        $response->addChild('result', $purl)->addAttribute('pid', $result);
       }
+      $response->addAttribute('type', 'success');
+      $response->addAttribute('count', $i);
       break;
   }
   return $response->asXML();
