@@ -30,11 +30,11 @@ function diginole_feas_webservice_query_processor($args) {
     $base_query = "";
     $i = 0;
     foreach ($base_queries as $key => $value) {
-      if ($key == 'catch_all_names_mt') {
-        $authors = explode('+', str_replace(' ', '+', $value));
-        foreach ($authors as $author) {
+      if ($key == 'catch_all_names_mt' || $key == 'catch_all_titles_mt') {
+        $tokens = explode('+', str_replace(' ', '+', $value));
+        foreach ($tokens as $token) {
           $prefix = ($i == 0 ? '' : '+');
-          $base_query .= "{$prefix}{$key}:\"{$author}\"";
+          $base_query .= "{$prefix}{$key}:\"{$token}\"";
           $i++;
         }
       }
@@ -78,9 +78,7 @@ function diginole_feas_webservice_query_processor($args) {
     }
    
     return diginole_feas_webservice_xml_builder('success', $pids);
-
   }
-
 }
 
 function diginole_feas_webservice_xml_builder($type, $args) {
@@ -100,14 +98,16 @@ function diginole_feas_webservice_xml_builder($type, $args) {
     case 'success':
       $i = 0;
       foreach ($args as $result) {    
-        $object = islandora_object_load($result);
-        $mods = simplexml_load_string($object['MODS']->content);
+        if (substr($result, 0, 4) == "fsu:") {
+          $object = islandora_object_load($result);
+          $mods = simplexml_load_string($object['MODS']->content);
 
-        foreach ($mods->identifier as $id) {
-          if (strtolower($id['type']) == 'iid') {
-            $purl = "http://purl.flvc.org/fsu/fd/{$id}";
-            $response->addChild('result', $purl)->addAttribute('pid', $result);
-            $i++;
+          foreach ($mods->identifier as $id) {
+            if (strtolower($id['type']) == 'iid') {
+              $purl = "http://purl.flvc.org/fsu/fd/{$id}";
+              $response->addChild('result', $purl)->addAttribute('pid', $result);
+              $i++;
+            }
           }
         }
       }
